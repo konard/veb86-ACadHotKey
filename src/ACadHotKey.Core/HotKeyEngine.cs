@@ -196,7 +196,8 @@ namespace ACadHotKey.Core
             if (Config.IgnoreDuringScript && (state.CmdActive & EditorState.CmdActiveScript) != 0)
                 return KeyDecision.Pass("script is running");
 
-            if (Config.PassThroughWhileTyping && _typing)
+            // Only character-producing hotkeys ("1", "Q") can be part of typed input; F-keys and Ctrl+X still work.
+            if (Config.PassThroughWhileTyping && _typing && ProducesCharacter(message))
             {
                 TrackTyping(message);
                 return KeyDecision.Pass("user is typing at the prompt");
@@ -241,13 +242,14 @@ namespace ACadHotKey.Core
                 return;
             }
 
-            if ((message.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) == 0
-                && VirtualKeys.IsTypingKey(message.VirtualKey)
-                && message.VirtualKey != VirtualKeys.Back)
+            if (ProducesCharacter(message) && message.VirtualKey != VirtualKeys.Back)
             {
                 _typing = true;
             }
         }
+
+        private static bool ProducesCharacter(KeyboardMessage message) =>
+            (message.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) == 0 && VirtualKeys.IsTypingKey(message.VirtualKey);
     }
 
     /// <summary>Decides whether the window that receives a key message is the drawing area.</summary>
