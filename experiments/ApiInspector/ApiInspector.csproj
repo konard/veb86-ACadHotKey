@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Experiment: dumps public members of AutoCAD .NET reference assemblies (from the
+       AutoCAD.NET NuGet packages) to verify API names/signatures used in docs/ and src/.
+       Usage: dotnet run DASHDASH <dir-with-acad-dlls> <dir-with-netfx-reference-assemblies> <TypeNameFilter>... -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="9.0.0" />
+  </ItemGroup>
+</Project>
