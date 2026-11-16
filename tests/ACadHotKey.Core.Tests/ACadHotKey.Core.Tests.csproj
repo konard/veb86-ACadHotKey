@@ -17,5 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\config\ACadHotKey.config.xml" Link="ACadHotKey.config.xml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\docs\technical-specification.md" Link="technical-specification.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

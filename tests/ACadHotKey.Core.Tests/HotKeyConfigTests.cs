@@ -19,6 +19,23 @@ public class HotKeyConfigTests
     }
 
     [Fact]
+    public void Example_from_the_specification_is_valid()
+    {
+        // docs/technical-specification.md, section 5.2: the first ```xml block must stay loadable.
+        var spec = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "technical-specification.md"));
+        var start = spec.IndexOf("```xml", StringComparison.Ordinal) + "```xml".Length;
+        var xml = spec.Substring(start, spec.IndexOf("```", start, StringComparison.Ordinal) - start);
+
+        var config = HotKeyConfig.Parse(xml);
+
+        Assert.Equal(7, config.Bindings.Count);
+        Assert.Contains("MYTEXTCMD", config.ExcludedCommands);
+        Assert.Contains("MTEXT", config.ExcludedCommands);
+        Assert.Equal("(c:MyLispFunc)", config.Find(KeyChord.Parse("Ctrl+Shift+D"))!.Macro);
+        Assert.Equal(CommandActivePolicy.Transparent, config.Find(KeyChord.Parse("Num0"))!.WhenCommandActive);
+    }
+
+    [Fact]
     public void Reads_all_attributes()
     {
         var config = HotKeyConfig.Parse("""
