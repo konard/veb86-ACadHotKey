@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ACadHotKey configuration (sample). Format: docs/technical-specification.md, section 5.
+
+  Location (first found wins):
+    %APPDATA%\ACadHotKey\ACadHotKey.config.xml   (per user)
+    <folder of ACadHotKey.dll>\ACadHotKey.config.xml
+  After editing run ACHK_RELOAD in AutoCAD.
+
+  Root attributes:
+    enabled                 true/false - master switch.
+    whenCommandActive       Interrupt | PassThrough | Transparent - default reaction when a command is running.
+                              Interrupt   - cancel the command (like Esc) and start the hotkey macro.
+                              PassThrough - give the key to AutoCAD as usual input.
+                              Transparent - run the macro transparently ('ZOOM) without cancelling.
+    cancelSequence          text sent before the macro for Interrupt; "^C" = Ctrl+C (cancel), like ^C^C in CUI macros.
+    passThroughWhileTyping  true: if something was already typed at the prompt (e.g. "@1"), hotkeys are ignored
+                            until Enter/Space/Esc.
+    ignoreDuringScript      true: hotkeys are ignored while a script runs.
+    echoMacro               true: the sent macro is echoed on the command line.
+
+  <HotKey> attributes:
+    key                     "1", "Q", "Num1" (numeric keypad), "F5", "Ctrl+Shift+D", "`", "0x31"...
+                            Letters/digits are physical keys: "Q" is also "Й" on the Russian layout.
+    macro                   command line text: "_LINE", "_.ZOOM _E", "(c:MyLispCommand)", "MYNETCOMMAND".
+                            "^C" = cancel, "\n" = Enter. Enter is added at the end automatically.
+    whenCommandActive       overrides the root attribute for this key.
+    passThroughOnPrompts    prompt kinds where the key is given to AutoCAD as input instead:
+                            Point Corner Distance Angle Double Integer String Keyword Selection Entity NestedEntity.
+    description             free text for ACHK_LIST.
+-->
+<ACadHotKey enabled="true"
+            whenCommandActive="Interrupt"
+            cancelSequence="^C^C"
+            passThroughWhileTyping="true"
+            ignoreDuringScript="true"
+            echoMacro="true">
+
+  <!-- Commands with in-place text editors: while they run, every key goes to AutoCAD.
+       keepDefaults="true" keeps the built-in list (MTEXT TEXT DTEXT MTEDIT TEXTEDIT DDEDIT ATTIPEDIT TABLEDIT TABLE MLEADER QLEADER LEADER DIMEDIT). -->
+  <ExcludedCommands keepDefaults="true"></ExcludedCommands>
+
+  <!-- Window class name fragments that are never treated as the drawing area (edit boxes). -->
+  <DeniedWindowClasses keepDefaults="true"></DeniedWindowClasses>
+
+  <HotKey key="1" macro="_LINE" description="Line" />
+  <HotKey key="2" macro="_PLINE" description="Polyline" />
+  <HotKey key="3" macro="_CIRCLE" description="Circle" />
+  <HotKey key="4" macro="_MOVE" description="Move" />
+  <HotKey key="5" macro="_COPY" description="Copy" />
+  <!-- Digits typed while AutoCAD asks for a number are passed to the prompt instead of being hotkeys: -->
+  <HotKey key="6" macro="_OFFSET" passThroughOnPrompts="Distance Double Integer" description="Offset" />
+  <!-- Zoom extents without cancelling the running command: -->
+  <HotKey key="Q" macro="_ZOOM _E" whenCommandActive="Transparent" description="Zoom extents (transparent)" />
+  <!-- Numeric keypad keeps working for typing numbers because Num1..Num9 are different keys. -->
+</ACadHotKey>

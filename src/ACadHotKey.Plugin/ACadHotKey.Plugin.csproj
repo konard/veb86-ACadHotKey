@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- AutoCAD 2020-2024 plugin (NETLOAD / autoloader bundle).
+       Built once against the AutoCAD 2020 API (AutoCAD.NET 23.1.0, which targets .NET Framework 4.7);
+       the same DLL is intended to load into AutoCAD 2021-2024 (R24.x), whose .NET API keeps these members.
+       AutoCAD 2025+ runs on .NET 8 and needs a separate build (see docs/research.md). -->
+  <PropertyGroup>
+    <TargetFramework>net47</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ACadHotKey</AssemblyName>
+    <RootNamespace>ACadHotKey.Plugin</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- 23.1.0 = AutoCAD 2020 API. Override to check other versions: dotnet build -p:AutoCADNetVersion=24.3.0 -->
+    <AutoCADNetVersion Condition="'$(AutoCADNetVersion)' == ''">23.1.0</AutoCADNetVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile-time references only: AutoCAD provides these assemblies at runtime. -->
+    <PackageReference Include="AutoCAD.NET" Version="$(AutoCADNetVersion)" ExcludeAssets="runtime" />
+    <!-- Allows building the net48 project with the dotnet CLI on any OS (no Windows SDK required). -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System.Xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ACadHotKey.Core\ACadHotKey.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\config\ACadHotKey.config.xml" Link="ACadHotKey.config.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
