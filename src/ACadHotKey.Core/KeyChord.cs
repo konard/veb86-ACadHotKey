@@ -260,6 +260,6 @@ namespace ACadHotKey.Core
             (code >= '0' && code <= '9') || (code >= 'A' && code <= 'Z')
             || (code >= NumPad0 && code <= 0x6F)
             || (code >= 0xBA && code <= 0xC0) || (code >= 0xDB && code <= 0xDE)
-            || code == Back;
+            || code == Back || code == Space;
     }
 }
