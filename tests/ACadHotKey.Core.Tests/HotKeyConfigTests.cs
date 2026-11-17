@@ -71,6 +71,13 @@ public class HotKeyConfigTests
     [InlineData("<ACadHotKey><HotKey key=\"Foo\" macro=\"_LINE\"/></ACadHotKey>", "unknown key name")]
     [InlineData("<ACadHotKey><HotKey key=\"1\" macro=\"a\"/><HotKey key=\"1\" macro=\"b\"/></ACadHotKey>", "more than once")]
     [InlineData("<ACadHotKey whenCommandActive=\"Kill\"/>", "whenCommandActive")]
+    [InlineData("<ACadHotKey whenCommandActive=\"99\"/>", "whenCommandActive")]
+    [InlineData("<ACadHotKey whenCommandActive=\"1\"/>", "whenCommandActive")]
+    [InlineData("<ACadHotKey><HotKey key=\"1\" macro=\"a\" passThroughOnPrompts=\"99\"/></ACadHotKey>", "prompt kind")]
+    [InlineData("<ACadHotKey><HotKey key=\"1\" macro=\"a\" passThroughOnPrompts=\"1\"/></ACadHotKey>", "prompt kind")]
+    [InlineData("<ACadHotKey enabeld=\"false\"/>", "enabeld")]
+    [InlineData("<ACadHotKey><Hotkey key=\"1\" macro=\"a\"/></ACadHotKey>", "Hotkey")]
+    [InlineData("<ACadHotKey><HotKey key=\"1\" macro=\"a\" whenCommandActive=\"99\"/></ACadHotKey>", "whenCommandActive")]
     [InlineData("<ACadHotKey enabled=\"yes\"/>", "true or false")]
     [InlineData("<ACadHotKey><HotKey key=\"1\" macro=\"a\" passThroughOnPrompts=\"Foo\"/></ACadHotKey>", "prompt kind")]
     public void Reports_readable_errors(string xml, string expectedFragment)

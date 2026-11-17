@@ -17,7 +17,25 @@ namespace ACadHotKey.Plugin
         private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetParent(IntPtr hWnd);
+        internal static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetFocus();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentProcessId();
+
+        internal static bool IsApplicationForeground()
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out var processId);
+            return processId == GetCurrentProcessId();
+        }
 
         [DllImport("user32.dll")]
         private static extern short GetKeyState(int nVirtKey);

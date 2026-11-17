@@ -127,15 +127,25 @@ namespace ACadHotKey.Core
         private readonly HashSet<int> _swallowedKeyDowns = new HashSet<int>();
         private bool _typing;
         private string _lastCommandNames = string.Empty;
+        private HotKeyConfig _config = null!;
 
         public HotKeyEngine(HotKeyConfig config)
         {
             Config = config ?? throw new ArgumentNullException(nameof(config));
         }
 
-        public HotKeyConfig Config { get; set; }
+        public HotKeyConfig Config
+        {
+            get => _config;
+            set
+            {
+                _config = value ?? throw new ArgumentNullException(nameof(value));
+                Enabled = value.Enabled;
+                ResetTyping();
+            }
+        }
 
-        /// <summary>Runtime on/off switch (commands ACHK_ON / ACHK_OFF), independent from the config file.</summary>
+        /// <summary>Runtime switch, initialized from the configuration on load/reload.</summary>
         public bool Enabled { get; set; } = true;
 
         /// <summary>True when the user has typed characters at the current prompt (see PassThroughWhileTyping).</summary>
@@ -144,17 +154,15 @@ namespace ACadHotKey.Core
         /// <summary>Forget the typed-input state (call on CommandWillStart/Ended/Cancelled and document switch).</summary>
         public void ResetTyping() => _typing = false;
 
+        /// <summary>Roll back a handled key when the host failed to queue its macro.</summary>
+        public void ReleaseKey(int virtualKey) => _swallowedKeyDowns.Remove(virtualKey);
+
+        /// <summary>Clear physical key state after application deactivation (key-up may go to another process).</summary>
+        public void ResetKeys() => _swallowedKeyDowns.Clear();
+
         public KeyDecision Process(KeyboardMessage message, EditorState state)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-
-            var commandNames = state.CommandNames ?? string.Empty;
-            if (!string.Equals(commandNames, _lastCommandNames, StringComparison.OrdinalIgnoreCase))
-            {
-                // A command started or finished since the last key: whatever was typed belongs to the old prompt.
-                _typing = false;
-                _lastCommandNames = commandNames;
-            }
 
             if (WindowMessages.IsKeyUp(message.Message))
             {
@@ -167,17 +175,12 @@ namespace ACadHotKey.Core
             if (!WindowMessages.IsKeyDown(message.Message))
                 return KeyDecision.Pass("not a key-down message");
 
-            if (!Enabled || !Config.Enabled)
-                return KeyDecision.Pass("hotkeys disabled");
-
-            if (!state.DrawingHasFocus)
-                return KeyDecision.Pass("focus is not in the drawing area");
-
-            var binding = Config.Find(new KeyChord(message.VirtualKey, message.Modifiers));
-            if (binding == null)
+            var commandNames = state.CommandNames ?? string.Empty;
+            if (!string.Equals(commandNames, _lastCommandNames, StringComparison.OrdinalIgnoreCase))
             {
-                TrackTyping(message);
-                return KeyDecision.Pass("not a hotkey");
+                // A command started or finished since the last key: whatever was typed belongs to the old prompt.
+                _typing = false;
+                _lastCommandNames = commandNames;
             }
 
             if (message.IsRepeat)
@@ -189,12 +192,31 @@ namespace ACadHotKey.Core
                     : KeyDecision.Pass("auto-repeat of a passed key");
             }
 
+            // A new physical press replaces stale state if its key-up was lost outside AutoCAD.
+            _swallowedKeyDowns.Remove(message.VirtualKey);
+
+            if (!Enabled)
+                return KeyDecision.Pass("hotkeys disabled");
+
+            if (!state.DrawingHasFocus)
+                return KeyDecision.Pass("focus is not in the drawing area");
+
+            if ((state.CmdActive & EditorState.CmdActiveDialog) != 0)
+                return KeyDecision.Pass("modal dialog is active");
+
             var excluded = state.Commands.FirstOrDefault(c => Config.ExcludedCommands.Contains(c));
             if (excluded != null)
                 return KeyDecision.Pass($"text input command {excluded} is active");
 
             if (Config.IgnoreDuringScript && (state.CmdActive & EditorState.CmdActiveScript) != 0)
                 return KeyDecision.Pass("script is running");
+
+            var binding = Config.Find(new KeyChord(message.VirtualKey, message.Modifiers));
+            if (binding == null)
+            {
+                TrackTyping(message);
+                return KeyDecision.Pass("not a hotkey");
+            }
 
             // Only character-producing hotkeys ("1", "Q") can be part of typed input; F-keys and Ctrl+X still work.
             if (Config.PassThroughWhileTyping && _typing && ProducesCharacter(message))
@@ -255,6 +277,26 @@ namespace ACadHotKey.Core
     /// <summary>Decides whether the window that receives a key message is the drawing area.</summary>
     public static class FocusPolicy
     {
+        /// <summary>
+        /// Requires the target to have actual keyboard focus and an unbroken ancestry to the active document.
+        /// Checks every control in the chain, including custom children of denied edit controls.
+        /// </summary>
+        public static bool IsDrawingArea(IntPtr target, IntPtr document, IntPtr focus,
+            Func<IntPtr, IntPtr> getParent, Func<IntPtr, string> getClassName, IEnumerable<string> deniedClassFragments)
+        {
+            if (target == IntPtr.Zero || document == IntPtr.Zero || target != focus) return false;
+            var denied = deniedClassFragments.ToArray();
+            var visited = new HashSet<IntPtr>();
+            for (var window = target; window != IntPtr.Zero && visited.Count < 64; window = getParent(window))
+            {
+                if (!visited.Add(window)) return false;
+                var name = getClassName(window);
+                if (string.IsNullOrEmpty(name) || !IsDrawingArea(true, name, denied)) return false;
+                if (window == document) return true;
+            }
+            return false;
+        }
+
         /// <param name="isDocumentWindowOrChild">msg.hwnd is Document.Window.Handle of the active document or its descendant (Win32 IsChild).</param>
         /// <param name="windowClassName">Win32 class name of msg.hwnd (GetClassName).</param>
         /// <param name="deniedClassFragments">Class name fragments of text input controls (in-place editors, edit boxes).</param>

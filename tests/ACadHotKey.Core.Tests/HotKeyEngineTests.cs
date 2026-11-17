@@ -264,4 +264,84 @@ public class HotKeyEngineTests
         Assert.Equal(KeyAction.Execute, engine.Process(KeyboardMessage.KeyDown(VirtualKeys.F1 + 1), Idle()).Action);
         Assert.False(engine.IsTyping);
     }
+
+    [Theory]
+    [InlineData("modifiers")]
+    [InlineData("disabled")]
+    [InlineData("reload")]
+    public void Held_hotkey_stays_swallowed_after_context_changes(string change)
+    {
+        var engine = CreateEngine();
+        engine.Process(KeyboardMessage.KeyDown(Key1), Idle());
+        if (change == "disabled") engine.Enabled = false;
+        if (change == "reload") engine.Config = new HotKeyConfig();
+        var modifiers = change == "modifiers" ? KeyModifiers.Shift : KeyModifiers.None;
+
+        Assert.Equal(KeyAction.Swallow, engine.Process(KeyboardMessage.KeyDown(Key1, modifiers, true), Idle()).Action);
+        Assert.Equal(KeyAction.Swallow, engine.Process(KeyboardMessage.KeyUp(Key1, modifiers), Idle()).Action);
+    }
+
+    [Fact]
+    public void Passed_repeat_does_not_become_hotkey_after_modifiers_change()
+    {
+        var engine = CreateEngine();
+        engine.Process(KeyboardMessage.KeyDown('3'), Idle());
+        Assert.Equal(KeyAction.PassThrough,
+            engine.Process(KeyboardMessage.KeyDown('3', KeyModifiers.Ctrl, true), Idle()).Action);
+    }
+
+    [Fact]
+    public void Runtime_on_can_enable_a_configuration_that_started_disabled()
+    {
+        var engine = CreateEngine(c => c.Enabled = false);
+        Assert.False(engine.Enabled);
+        engine.Enabled = true;
+        Assert.Equal(KeyAction.Execute, engine.Process(KeyboardMessage.KeyDown(Key1), Idle()).Action);
+    }
+
+    [Fact]
+    public void Reload_resets_typing_and_applies_configured_enabled_state()
+    {
+        var engine = CreateEngine();
+        engine.Process(KeyboardMessage.KeyDown(KeyL), Idle());
+        engine.Config = engine.Config;
+        Assert.False(engine.IsTyping);
+        Assert.Equal(KeyAction.Execute, engine.Process(KeyboardMessage.KeyDown(Key1), Idle()).Action);
+    }
+
+    [Fact]
+    public void Bound_space_finishes_typed_input_instead_of_running_macro()
+    {
+        var engine = CreateEngine(c => c.Bindings.Add(new HotKeyBinding(KeyChord.Parse("Space"), "_MOVE")));
+        engine.Process(KeyboardMessage.KeyDown(KeyL), Idle());
+        Assert.Equal(KeyAction.PassThrough, engine.Process(KeyboardMessage.KeyDown(VirtualKeys.Space), Idle()).Action);
+        Assert.False(engine.IsTyping);
+    }
+
+    [Fact]
+    public void Modal_dialog_disables_hotkeys_even_if_message_targets_document()
+    {
+        Assert.Equal(KeyAction.PassThrough,
+            CreateEngine().Process(KeyboardMessage.KeyDown(Key1), InCommand(cmdActive: EditorState.CmdActiveDialog)).Action);
+    }
+
+    [Fact]
+    public void Release_without_document_snapshot_preserves_typed_input()
+    {
+        var engine = CreateEngine();
+        engine.Process(KeyboardMessage.KeyDown('9'), InCommand());
+        engine.Process(KeyboardMessage.KeyUp('9'), new EditorState());
+        Assert.True(engine.IsTyping);
+        Assert.Equal(KeyAction.PassThrough, engine.Process(KeyboardMessage.KeyDown(Key1), InCommand()).Action);
+    }
+
+    [Fact]
+    public void New_press_after_a_lost_release_replaces_stale_swallowed_state()
+    {
+        var engine = CreateEngine();
+        engine.Process(KeyboardMessage.KeyDown(Key1), Idle());
+        engine.Enabled = false;
+        Assert.Equal(KeyAction.PassThrough, engine.Process(KeyboardMessage.KeyDown(Key1), Idle()).Action);
+        Assert.Equal(KeyAction.PassThrough, engine.Process(KeyboardMessage.KeyUp(Key1), Idle()).Action);
+    }
 }

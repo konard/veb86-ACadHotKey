@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using ACadHotKey.Core;
 using Autodesk.AutoCAD.ApplicationServices;
@@ -26,9 +26,20 @@ namespace ACadHotKey.Plugin
 
         internal HotKeyEngine Engine { get; private set; } = new HotKeyEngine(new HotKeyConfig());
 
-        internal string? ConfigPath { get; private set; }
+        internal string? ConfigPath => _configStore.Path;
 
-        private readonly PromptTracker _prompts = new PromptTracker();
+        private readonly HotKeyConfigStore _configStore = new HotKeyConfigStore();
+        private readonly HashSet<Document> _documents = new HashSet<Document>();
+        private readonly PromptTracker _prompts;
+        private bool _modal;
+
+        public HotKeyPlugin()
+        {
+            _prompts = new PromptTracker(doc =>
+            {
+                if (doc == AcApp.DocumentManager.MdiActiveDocument) Engine.ResetTyping();
+            });
+        }
 
         public void Initialize()
         {
@@ -42,6 +53,8 @@ namespace ACadHotKey.Plugin
             docs.DocumentActivated += OnDocumentActivated;
 
             AcApp.PreTranslateMessage += OnPreTranslateMessage;
+            AcApp.EnterModal += OnEnterModal;
+            AcApp.LeaveModal += OnLeaveModal;
 
             docs.MdiActiveDocument?.Editor.WriteMessage("\nACadHotKey: " + message +
                 " Commands: ACHK_LIST, ACHK_ON, ACHK_OFF, ACHK_RELOAD, ACHK_DIAG.\n");
@@ -50,6 +63,14 @@ namespace ACadHotKey.Plugin
         public void Terminate()
         {
             AcApp.PreTranslateMessage -= OnPreTranslateMessage;
+            AcApp.EnterModal -= OnEnterModal;
+            AcApp.LeaveModal -= OnLeaveModal;
+            var docs = AcApp.DocumentManager;
+            docs.DocumentCreated -= OnDocumentCreated;
+            docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;
+            docs.DocumentActivated -= OnDocumentActivated;
+            foreach (var doc in new List<Document>(_documents)) DetachDocument(doc);
+            Engine.ResetKeys();
             Instance = null;
         }
 
@@ -61,38 +82,22 @@ namespace ACadHotKey.Plugin
         {
             var userPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ACadHotKey", ConfigFileName);
             var dllPath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".", ConfigFileName);
-            var path = new[] { userPath, dllPath }.FirstOrDefault(File.Exists);
-            if (path == null)
-            {
-                message = "configuration file not found (" + userPath + " or " + dllPath + "), hotkeys are not defined.";
-                return false;
-            }
-
-            try
-            {
-                var config = HotKeyConfig.Load(path);
-                Engine.Config = config;
-                ConfigPath = path;
-                message = config.Bindings.Count + " hotkey(s) loaded from " + path + ".";
-                TraceLog.Write(message);
-                return true;
-            }
-            catch (System.Exception ex) when (ex is FormatException || ex is IOException || ex is System.Xml.XmlException || ex is UnauthorizedAccessException)
-            {
-                // Keep the previous (working) configuration.
-                message = "configuration error in " + path + ": " + ex.Message;
-                TraceLog.Write(message);
-                return false;
-            }
+            var loaded = _configStore.TryReload(new[] { userPath, dllPath }, out message);
+            if (loaded) Engine.Config = _configStore.Current;
+            TraceLog.Write(message);
+            return loaded;
         }
 
         private void AttachDocument(Document doc)
         {
+            if (!_documents.Add(doc)) return;
             _prompts.Attach(doc);
-            doc.CommandWillStart += OnCommandStateChanged;
-            doc.CommandEnded += OnCommandStateChanged;
-            doc.CommandCancelled += OnCommandStateChanged;
-            doc.CommandFailed += OnCommandStateChanged;
+        }
+
+        private void DetachDocument(Document doc)
+        {
+            if (!_documents.Remove(doc)) return;
+            _prompts.Forget(doc);
         }
 
         private void OnDocumentCreated(object sender, DocumentCollectionEventArgs e)
@@ -102,17 +107,13 @@ namespace ACadHotKey.Plugin
 
         private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
         {
-            if (e.Document != null) _prompts.Forget(e.Document);
+            if (e.Document != null) DetachDocument(e.Document);
         }
 
         private void OnDocumentActivated(object sender, DocumentCollectionEventArgs e) => Engine.ResetTyping();
 
-        private void OnCommandStateChanged(object sender, CommandEventArgs e)
-        {
-            if (sender is Document doc) _prompts.Reset(doc);
-            Engine.ResetTyping();
-            TraceLog.Write("command event " + e.GlobalCommandName);
-        }
+        private void OnEnterModal(object sender, EventArgs e) => _modal = true;
+        private void OnLeaveModal(object sender, EventArgs e) => _modal = false;
 
         private void OnPreTranslateMessage(object sender, PreTranslateMessageEventArgs e)
         {
@@ -122,24 +123,45 @@ namespace ACadHotKey.Plugin
 
             try
             {
+                if (e.Handled) return;
+                if (!NativeMethods.IsApplicationForeground())
+                {
+                    Engine.ResetKeys();
+                    return;
+                }
                 var doc = AcApp.DocumentManager.MdiActiveDocument;
-                if (doc == null) return;
-
                 var key = new KeyboardMessage(msg.message, unchecked((int)msg.wParam.ToInt64()) & 0xFF,
                     NativeMethods.GetModifiers(), WindowMessages.IsRepeat(msg.lParam.ToInt64()));
+
+                // Release a consumed key even if the active document was closed while it was held.
+                if (WindowMessages.IsKeyUp(msg.message))
+                {
+                    e.Handled = Engine.Process(key, new EditorState()).Handled;
+                    if (TraceLog.Enabled) TraceLog.Write(string.Format(
+                        "key-up {0} hwnd {1} class '{2}' chain [{3}] CMDNAMES '{4}' CMDACTIVE {5} prompt {6} handled {7}",
+                        key.VirtualKey, NativeMethods.Hex(msg.hwnd), NativeMethods.GetClassName(msg.hwnd),
+                        NativeMethods.DescribeParentChain(msg.hwnd), AcApp.GetSystemVariable("CMDNAMES"),
+                        AcApp.GetSystemVariable("CMDACTIVE"), doc == null ? PromptKind.None : _prompts.Get(doc), e.Handled));
+                    return;
+                }
+                if (doc == null) return;
 
                 var docWindow = doc.Window?.Handle ?? IntPtr.Zero;
                 var isDocChild = docWindow != IntPtr.Zero && (msg.hwnd == docWindow || NativeMethods.IsChild(docWindow, msg.hwnd));
                 var className = NativeMethods.GetClassName(msg.hwnd);
                 var state = new EditorState
                 {
-                    DrawingHasFocus = FocusPolicy.IsDrawingArea(isDocChild, className, Engine.Config.DeniedWindowClasses),
+                    DrawingHasFocus = !_modal && FocusPolicy.IsDrawingArea(msg.hwnd, docWindow, NativeMethods.GetFocus(),
+                        NativeMethods.GetParent, NativeMethods.GetClassName, Engine.Config.DeniedWindowClasses),
                     CommandNames = AcApp.GetSystemVariable("CMDNAMES") as string ?? string.Empty,
                     CmdActive = Convert.ToInt32(AcApp.GetSystemVariable("CMDACTIVE")),
                     Prompt = _prompts.Get(doc),
                 };
 
-                var decision = Engine.Process(key, state);
+                var decision = KeyMessageProcessor.Process(Engine, key, state,
+                    text => doc.SendStringToExecute(text, true, false, Engine.Config.EchoMacro),
+                    error => TraceLog.Write("dispatch error: " + error));
+                e.Handled = decision.Handled;
 
                 if (TraceLog.Enabled && WindowMessages.IsKeyDown(msg.message))
                 {
@@ -148,17 +170,6 @@ namespace ACadHotKey.Plugin
                         new KeyChord(key.VirtualKey, key.Modifiers), NativeMethods.Hex(msg.hwnd), className,
                         NativeMethods.Hex(docWindow), isDocChild, NativeMethods.DescribeParentChain(msg.hwnd),
                         state.CommandNames, state.CmdActive, state.Prompt, Engine.IsTyping, decision));
-                }
-
-                if (!decision.Handled) return;
-                e.Handled = true;
-
-                if (decision.Action == KeyAction.Execute && decision.Text != null)
-                {
-                    _prompts.Reset(doc);
-                    // Queues the text into the command input stream of the document: "^C^C" cancels
-                    // the running command, then the macro starts. Safe to call from application context.
-                    doc.SendStringToExecute(decision.Text, true, false, Engine.Config.EchoMacro);
                 }
             }
             catch (System.Exception ex)
