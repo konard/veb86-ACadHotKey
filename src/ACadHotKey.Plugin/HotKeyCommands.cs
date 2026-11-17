@@ -39,12 +39,13 @@ namespace ACadHotKey.Plugin
             var ed = Ed;
             if (plugin == null || ed == null) return;
             var config = plugin.Engine.Config;
-            ed.WriteMessage("\nACadHotKey: {0}, config: {1}", plugin.Engine.Enabled && config.Enabled ? "ON" : "OFF",
+            ed.WriteMessage("\nACadHotKey: {0}, config: {1}", plugin.Engine.Enabled ? "ON" : "OFF",
                 plugin.ConfigPath ?? "<none>");
             foreach (var b in config.Bindings)
             {
                 ed.WriteMessage("\n  {0,-14} {1,-30} {2,-12} {3}", b.Key, b.Macro,
-                    b.WhenCommandActive ?? config.DefaultWhenCommandActive, b.Description);
+                    b.WhenCommandActive ?? config.DefaultWhenCommandActive,
+                    b.Description + (b.PassThroughOnPrompts.Count == 0 ? "" : " [input: " + string.Join(", ", b.PassThroughOnPrompts) + "]"));
             }
         }
 

@@ -16,6 +16,10 @@
     <ProjectReference Include="..\..\src\ACadHotKey.Core\ACadHotKey.Core.csproj" SetTargetFramework="TargetFramework=netstandard2.0" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Compile the real subscription adapter against small host doubles; API compatibility
+         is checked separately by building the plugin against each Autodesk SDK. -->
+    <Compile Include="..\..\src\ACadHotKey.Plugin\PromptTracker.cs" Link="Plugin\PromptTracker.cs" />
+    <Compile Include="..\..\src\ACadHotKey.Plugin\TraceLog.cs" Link="Plugin\TraceLog.cs" />
     <None Include="..\..\config\ACadHotKey.config.xml" Link="ACadHotKey.config.xml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\technical-specification.md" Link="technical-specification.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
