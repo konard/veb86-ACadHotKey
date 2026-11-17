@@ -2,19 +2,25 @@
 <!-- Autoloader bundle for AutoCAD 2020 (R23.1) - 2024 (R24.3).
      Copy the ACadHotKey.bundle folder to %APPDATA%\Autodesk\ApplicationPlugins\ (per user)
      or %PROGRAMDATA%\Autodesk\ApplicationPlugins\ (all users) and put the build output
-     (ACadHotKey.dll, ACadHotKey.Core.dll, ACadHotKey.config.xml) into Contents\. -->
+     into Contents/2020 and Contents/2021-2024 (experiments/package.sh does this). -->
 <ApplicationPackage SchemaVersion="1.0"
-                    AppVersion="0.1.0"
+                    AppVersion="0.2.0"
                     ProductCode="{6C1F0E35-9C1A-4E0B-9C55-2F1B7A3C2D11}"
                     Name="ACadHotKey"
                     Description="Single-key hotkeys for the AutoCAD drawing area"
                     Author="ACadHotKey">
   <CompanyDetails Name="ACadHotKey" />
-  <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R23.1" SeriesMax="R24.3" />
-  <Components Description="Plugin">
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R23.1" SeriesMax="R24.3" />
+  <Components Description="AutoCAD 2020">
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R23.1" SeriesMax="R23.1" />
     <ComponentEntry AppName="ACadHotKey"
-                    ModuleName="./Contents/ACadHotKey.dll"
+                    ModuleName="./Contents/2020/ACadHotKey.dll"
+                    AppDescription="Intercepts keys in the drawing area and runs bound commands"
+                    LoadOnAutoCADStartup="True" />
+  </Components>
+  <Components Description="AutoCAD 2021-2024">
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R24.0" SeriesMax="R24.3" />
+    <ComponentEntry AppName="ACadHotKey"
+                    ModuleName="./Contents/2021-2024/ACadHotKey.dll"
                     AppDescription="Intercepts keys in the drawing area and runs bound commands"
                     LoadOnAutoCADStartup="True" />
   </Components>
